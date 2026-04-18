@@ -1,5 +1,4 @@
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-type Page = import("puppeteer").Page;
+import { Page } from "puppeteer-core";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -14,199 +13,112 @@ export interface EngineRunResult {
   reason?: string;
 }
 
-// ── Condition ────────────────────────────────────────────────────────────────
-
 export interface StepCondition {
-  /** Selectors that must be visible + interactable */
   exists?: string[];
-  /** Selectors that must be absent or hidden */
   notExists?: string[];
-  /** Current URL must include this substring */
   urlContains?: string;
-  /** document.body.innerText must include this substring */
   textContains?: string;
 }
 
-// ── Commands ─────────────────────────────────────────────────────────────────
-
 interface BaseCommand {
-  /** How many times to retry on failure (overrides engine default) */
   retries?: number;
-  /** ms between retries (overrides engine default) */
   retryDelay?: number;
-  /** If true, failure is non-fatal — engine logs and continues */
   optional?: boolean;
 }
 
-/** Type text into an input (clears first) */
 export interface TypeCommand extends BaseCommand {
   action: "type";
   selector: string;
-  /** Supports {{contextKey}} placeholders */
   value: string;
-  /** ms delay between keystrokes — default 30 */
   typeDelay?: number;
 }
-
-/** Click an element */
 export interface ClickCommand extends BaseCommand {
   action: "click";
   selector: string;
 }
-
-/** Select an <option> by value in a <select> */
 export interface SelectCommand extends BaseCommand {
   action: "select";
   selector: string;
-  /** The <option value="…"> to select. Supports {{contextKey}} */
   value: string;
 }
-
-/** Check a checkbox (no-op if already checked) */
 export interface CheckCommand extends BaseCommand {
   action: "check";
   selector: string;
 }
-
-/** Uncheck a checkbox (no-op if already unchecked) */
 export interface UncheckCommand extends BaseCommand {
   action: "uncheck";
   selector: string;
 }
-
-/** Set a radio button by clicking it */
 export interface RadioCommand extends BaseCommand {
   action: "radio";
   selector: string;
 }
-
-/** Focus an element */
 export interface FocusCommand extends BaseCommand {
   action: "focus";
   selector: string;
 }
-
-/** Hover over an element */
 export interface HoverCommand extends BaseCommand {
   action: "hover";
   selector: string;
 }
-
-/**
- * Scroll an element into view.
- * NOTE: good place for a screenshot before/after for debugging scroll state.
- */
 export interface ScrollToCommand extends BaseCommand {
   action: "scrollTo";
   selector: string;
 }
-
-/** Scroll to an absolute pixel position on the page */
 export interface ScrollByCommand extends BaseCommand {
   action: "scrollBy";
-  /** Pixels to scroll horizontally */
   x?: number;
-  /** Pixels to scroll vertically */
   y?: number;
 }
-
-/** Press a named keyboard key (Enter, Tab, Escape, ArrowDown, …) */
 export interface PressKeyCommand extends BaseCommand {
   action: "pressKey";
-  /** Puppeteer KeyInput name e.g. "Enter", "Tab", "Escape", "ArrowDown" */
   key: string;
 }
-
-/** Hold modifier + press key (e.g. Ctrl+A, Shift+Tab) */
 export interface KeyComboCommand extends BaseCommand {
   action: "keyCombo";
-  /** Modifier keys to hold: "Control" | "Shift" | "Alt" | "Meta" */
   modifiers: Array<"Control" | "Shift" | "Alt" | "Meta">;
-  /** Key to press while modifiers held */
   key: string;
 }
-
-/** Upload a file to a file input */
 export interface UploadFileCommand extends BaseCommand {
   action: "uploadFile";
   selector: string;
-  /** Absolute path on disk. Supports {{contextKey}} */
   filePath: string;
 }
-
-/**
- * Clear an input then type into it using the keyboard (no JS injection).
- * Useful for React-controlled inputs that ignore programmatic .value writes.
- */
 export interface ClearAndTypeCommand extends BaseCommand {
   action: "clearAndType";
   selector: string;
-  /** Supports {{contextKey}} placeholders */
   value: string;
   typeDelay?: number;
 }
-
-/** Wait a fixed number of milliseconds */
 export interface WaitCommand extends BaseCommand {
   action: "wait";
-  /** Milliseconds to wait */
   ms: number;
 }
-
-/** Wait until a selector is visible */
 export interface WaitForSelectorCommand extends BaseCommand {
   action: "waitForSelector";
   selector: string;
-  /** Timeout ms — default 15 000 */
   timeout?: number;
 }
-
-/** Wait for a navigation / page load to complete */
 export interface WaitForNavigationCommand extends BaseCommand {
   action: "waitForNavigation";
   waitUntil?: "load" | "domcontentloaded" | "networkidle0" | "networkidle2";
-  /** Timeout ms — default 15 000 */
   timeout?: number;
 }
-
-/**
- * Read an element's value or text and store it in engine context.
- * NOTE: good place for a screenshot to verify the read value.
- */
 export interface ReadValueCommand extends BaseCommand {
   action: "readValue";
   selector: string;
-  /** Key to store the value under in this.context */
   saveAs: string;
 }
-
-/** Manually set a context key to a literal value (supports {{placeholders}}) */
 export interface SetContextCommand extends BaseCommand {
   action: "setContext";
   key: string;
   value: string;
 }
-
-/**
- * Take a screenshot and save to disk.
- * Use this command liberally:
- *   - before/after multi-field steps
- *   - after navigation
- *   - on error paths (optional:true so it never blocks)
- *   - before submit
- */
 export interface ScreenshotCommand extends BaseCommand {
   action: "screenshot";
-  /** File path to save PNG. Defaults to `screenshot_<timestamp>.png` */
   path?: string;
-  /** Capture full scrollable page — default false */
   fullPage?: boolean;
 }
-
-/**
- * Conditional branch — no JS eval; compares context values only.
- * value1 / value2 support {{contextKey}} placeholders.
- */
 export interface IfCommand extends BaseCommand {
   action: "if";
   value1: string;
@@ -239,54 +151,23 @@ export type Command =
   | ScreenshotCommand
   | IfCommand;
 
-// ── Steps ────────────────────────────────────────────────────────────────────
-
 export interface Step {
   id: string;
   condition: StepCondition;
   commands: Command[];
-  /** Higher = evaluated first. Default 0 */
   priority?: number;
-  /** If false (default), step runs at most once per engine.run() */
   repeatable?: boolean;
 }
 
-// ── Engine options ────────────────────────────────────────────────────────────
-
 export interface FormEngineOptions {
-  /**
-   * How often (ms) the engine polls all conditions (step + successCondition).
-   * Replaces old stepSettleTime fixed-wait — engine fires every `pollInterval`
-   * ms after page load instead of sleeping a fixed duration after each step.
-   * Default: 1 000
-   */
   pollInterval?: number;
-  /** Default retry count per command. Default 3 */
   commandRetries?: number;
-  /** ms between retries. Default 1 000 */
   retryDelay?: number;
-  /** Safety cap on loop iterations. Default 30 */
   maxIterations?: number;
-  /**
-   * How many consecutive poll ticks a single step may match before the
-   * engine treats it as an infinite loop. Default 3.
-   */
   consecutiveMatchLimit?: number;
-  /** Enable verbose console logging. Default false */
   debug?: boolean;
-  /**
-   * Checked on EVERY poll tick alongside step conditions — highest priority.
-   * Matched → return status:'success' instantly, no further steps run.
-   * Not matched after loop exits → status:'unknown'.
-   * Omitted → legacy: clean exit = success.
-   */
   successCondition?: StepCondition;
-  /**
-   * Total ms budget for engine.run(). Exceeding it → status:'unknown'.
-   * 0 = no timeout (default).
-   */
   runTimeout?: number;
-  /** Override the internal logger (each call = one log line) */
   logger?: (...args: unknown[]) => void;
 }
 
@@ -304,13 +185,9 @@ export class FormEngine {
     logger: (...args: unknown[]) => void;
   };
 
-  /** Steps that have completed (non-repeatable guard) */
   private executedSteps = new Set<string>();
-  /** Shared state across steps — populated by readValue / setContext */
   private context: Record<string, string> = {};
-  /** Per-step consecutive-match counter (infinite-loop guard) */
   private consecutiveMatchCount: Record<string, number> = {};
-
   private log: (...args: unknown[]) => void;
 
   constructor(page: Page, steps: Step[], options: FormEngineOptions = {}) {
@@ -344,14 +221,11 @@ export class FormEngine {
     return [...steps].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
   }
 
-  /** Resolve {{key}} placeholders from this.context */
   private _resolveValue(value: string): string {
     return value.replace(/\{\{(\w+)\}\}/g, (_, key: string) => {
       if (!(key in this.context)) {
         throw new Error(
-          `Context key "{{${key}}}" not found. Available: ${
-            Object.keys(this.context).join(", ") || "(none)"
-          }`
+          `Context key "{{${key}}}" not found. Available: ${Object.keys(this.context).join(", ") || "(none)"}`,
         );
       }
       return this.context[key];
@@ -362,62 +236,46 @@ export class FormEngine {
   // PAGE LOAD GUARD
   // ─────────────────────────────────────────────
 
-  /**
-   * Wait for the page to be fully loaded before scanning conditions.
-   *
-   * Strategy:
-   *   1. domcontentloaded — DOM is parsed and ready (fast)
-   *   2. networkidle2     — no more than 2 open network connections for 500ms
-   *
-   * Both are raced with a 30s safety timeout so the engine never hangs
-   * indefinitely on a broken page load.
-   */
-  private async _waitForPageLoad(): Promise<void> {
+  private async _waitForPageLoad(): Promise<boolean> {
     const LOAD_TIMEOUT = 30_000;
+    const MAX_RETRIES = 50;
+    const SLEEP_MS = 1_000;
+    const sleep = (ms: number) =>
+      new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-    try {
-      // Step 1 — DOM ready
-      await this.page.waitForFunction(
-        () => document.readyState === "interactive" || document.readyState === "complete",
-        { timeout: LOAD_TIMEOUT }
-      );
-      this.log("  📄 DOMContentLoaded");
-
-      // Step 2 — network quiet
-      await this.page.waitForNavigation({
-        waitUntil: "networkidle2",
-        timeout: LOAD_TIMEOUT,
-      }).catch(() => {
-        // networkidle2 can time out on pages with long-polling/websockets —
-        // treat as non-fatal; DOM is ready so we can still scan conditions.
-        this.log("  ⚠ networkidle2 timeout (non-fatal) — scanning anyway");
-      });
-      this.log("  🌐 networkidle2");
-    } catch (e: unknown) {
-      // If even domcontentloaded times out, log and continue — better to
-      // attempt condition matching than to hard-fail the whole run.
-      this.log(`  ⚠ Page load check failed: ${(e as Error).message} — continuing`);
+    let domReady = false;
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await this.page.waitForFunction(
+          () =>
+            document.readyState === "interactive" ||
+            document.readyState === "complete",
+          { timeout: LOAD_TIMEOUT },
+        );
+        domReady = true;
+        this.log(`Page Loaded (attempt ${attempt})`);
+        break;
+      } catch {
+        this.log(`Page not loaded — attempt ${attempt}/${MAX_RETRIES}`);
+        if (attempt < MAX_RETRIES) await sleep(SLEEP_MS);
+      }
     }
+
+    if (!domReady) {
+      this.log("  ✖ Page never became ready after 50 attempts — aborting");
+      return false;
+    }
+    return true;
   }
 
   // ─────────────────────────────────────────────
-  // VISIBILITY CHECKS  (no JS injection — uses Puppeteer's built-ins)
+  // VISIBILITY CHECKS
   // ─────────────────────────────────────────────
 
-  /**
-   * True iff selector resolves to an element that is:
-   *   - rendered (not display:none / visibility:hidden / opacity:0)
-   *   - has non-zero bounding rect
-   *   - not disabled
-   *
-   * Uses Puppeteer's built-in $eval with standard DOM APIs — no arbitrary
-   * JS string injection.
-   */
   private async _isVisibleAndInteractable(selector: string): Promise<boolean> {
     try {
       const el = await this.page.$(selector);
       if (!el) return false;
-
       return await this.page.$eval(selector, (el: Element) => {
         const style = window.getComputedStyle(el as HTMLElement);
         const rect = (el as HTMLElement).getBoundingClientRect();
@@ -435,7 +293,6 @@ export class FormEngine {
     }
   }
 
-  /** True iff selector is absent from DOM OR is hidden */
   private async _isAbsent(selector: string): Promise<boolean> {
     const el = await this.page.$(selector);
     if (!el) return true;
@@ -444,49 +301,53 @@ export class FormEngine {
   }
 
   // ─────────────────────────────────────────────
-  // CONDITION EVALUATION
+  // CONDITION SCORING  ← NEW
   // ─────────────────────────────────────────────
 
   /**
-   * Evaluate a StepCondition against the live page.
-   * No JS string injection — every check uses Puppeteer native APIs or
-   * $eval with typed DOM accessors only.
-   *
-   * Shared by step-matching AND successCondition outcome check.
+   * Score condition against live page.
+   * Each sub-condition that passes adds 1 point.
+   * Returns { score, total, pct } where pct = Math.round(score/total*100).
+   * total=0 → pct=0 (empty condition = no signal).
    */
-  private async _evaluateCondition(cond: StepCondition): Promise<boolean> {
+  private async _scoreCondition(
+    cond: StepCondition,
+  ): Promise<{ score: number }> {
     const { exists = [], notExists = [], urlContains, textContains } = cond;
+    let score = 0;
 
-    // URL substring check
-    if (urlContains) {
-      if (!this.page.url().includes(urlContains)) return false;
+    if (urlContains !== undefined) {
+      if (this.page.url().includes(urlContains)) score++;
     }
 
-    // Body text check — needle passed as serialised arg, no string injection
-    if (textContains) {
+    if (textContains !== undefined) {
       try {
-        const found = await this.page.$eval(
-          "body",
-          (body: Element, needle: unknown) =>
-            ((body as HTMLElement).innerText ?? "").includes(needle as string),
-          textContains
-        );
-        if (!found) return false;
+        const html = await this.page.content();
+        if (new RegExp(textContains, "i").test(html)) score++;
       } catch {
-        return false;
+        /* miss */
       }
     }
 
     for (const sel of exists) {
-      if (!(await this._isVisibleAndInteractable(sel))) return false;
+      if (await this._isVisibleAndInteractable(sel)) score++;
     }
 
     for (const sel of notExists) {
-      if (!(await this._isAbsent(sel))) return false;
+      if (await this._isAbsent(sel)) score++;
     }
 
-    return true;
+    return { score };
   }
+
+  /**
+   * Legacy full-match check (score === total, total > 0).
+   * Used where we need a hard pass/fail (page-load guard etc.).
+   */
+  // private async _evaluateCondition(cond: StepCondition): Promise<boolean> {
+  //   const { score, total } = await this._scoreCondition(cond);
+  //   return total > 0 && score === total;
+  // }
 
   // ─────────────────────────────────────────────
   // COMMAND EXECUTION
@@ -494,13 +355,12 @@ export class FormEngine {
 
   private async _executeCommand(cmd: Command): Promise<void> {
     switch (cmd.action) {
-
-      // ── Text input ──────────────────────────────────────────────────────
-
       case "type": {
         const value = this._resolveValue(cmd.value);
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
-        // Select-all then delete → avoids needing JS to clear .value
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         await this.page.click(cmd.selector, { clickCount: 3 });
         await this.page.keyboard.press("Backspace");
         await this.page.type(cmd.selector, value, {
@@ -508,15 +368,12 @@ export class FormEngine {
         });
         break;
       }
-
       case "clearAndType": {
-        /**
-         * Keyboard-only clear + type (no JS .value = '' injection).
-         * Works for React-controlled inputs that ignore programmatic value writes.
-         * Focus → Ctrl+A → Backspace → type.
-         */
         const value = this._resolveValue(cmd.value);
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         await this.page.focus(cmd.selector);
         await this.page.keyboard.down("Control");
         await this.page.keyboard.press("KeyA");
@@ -527,104 +384,91 @@ export class FormEngine {
         });
         break;
       }
-
-      // ── Click ───────────────────────────────────────────────────────────
-
       case "click": {
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
-        await this.page.click(cmd.selector);
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
+        this.log(`  → Clicking "${cmd.selector}"`);
+        await this.page.$eval(cmd.selector, (element) => element.click());
         break;
       }
-
-      // ── Select / Dropdowns ──────────────────────────────────────────────
-
       case "select": {
         const value = this._resolveValue(cmd.value);
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         await this.page.select(cmd.selector, value);
         break;
       }
-
-      // ── Checkboxes / Radio ──────────────────────────────────────────────
-
       case "check": {
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         const checked = await this.page.$eval(
           cmd.selector,
-          (el: Element) => (el as HTMLInputElement).checked
+          (el: Element) => (el as HTMLInputElement).checked,
         );
         if (!checked) await this.page.click(cmd.selector);
         break;
       }
-
       case "uncheck": {
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         const unchecked = await this.page.$eval(
           cmd.selector,
-          (el: Element) => (el as HTMLInputElement).checked
+          (el: Element) => (el as HTMLInputElement).checked,
         );
         if (unchecked) await this.page.click(cmd.selector);
         break;
       }
-
       case "radio": {
-        // Click radio only if not already selected
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         const selected = await this.page.$eval(
           cmd.selector,
-          (el: Element) => (el as HTMLInputElement).checked
+          (el: Element) => (el as HTMLInputElement).checked,
         );
         if (!selected) await this.page.click(cmd.selector);
         break;
       }
-
-      // ── Focus / Hover ───────────────────────────────────────────────────
-
       case "focus": {
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         await this.page.focus(cmd.selector);
         break;
       }
-
       case "hover": {
-        await this.page.waitForSelector(cmd.selector, { visible: true, timeout: 8_000 });
+        await this.page.waitForSelector(cmd.selector, {
+          visible: true,
+          timeout: 8_000,
+        });
         await this.page.hover(cmd.selector);
         break;
       }
-
-      // ── Scroll ──────────────────────────────────────────────────────────
-
       case "scrollTo": {
-        /**
-         * NOTE: Consider adding a screenshot command before/after scrollTo
-         * when debugging layout or visibility issues on long pages.
-         */
         await this.page.waitForSelector(cmd.selector, { timeout: 8_000 });
         await this.page.$eval(cmd.selector, (el: Element) =>
-          el.scrollIntoView({ behavior: "smooth", block: "center" })
+          el.scrollIntoView({ behavior: "smooth", block: "center" }),
         );
         break;
       }
-
       case "scrollBy": {
-        /**
-         * NOTE: Screenshot after scrollBy useful when verifying lazy-loaded
-         * content appears after scroll.
-         */
-        await this.page.mouse.wheel({
-          deltaX: cmd.x ?? 0,
-          deltaY: cmd.y ?? 0,
-        });
+        await this.page.mouse.wheel({ deltaX: cmd.x ?? 0, deltaY: cmd.y ?? 0 });
         break;
       }
-
-      // ── Keyboard ────────────────────────────────────────────────────────
-
       case "pressKey": {
         await this.page.keyboard.press(cmd.key as any);
         break;
       }
-
       case "keyCombo": {
         for (const mod of cmd.modifiers) await this.page.keyboard.down(mod);
         await this.page.keyboard.press(cmd.key as any);
@@ -632,28 +476,17 @@ export class FormEngine {
           await this.page.keyboard.up(mod);
         break;
       }
-
-      // ── File upload ─────────────────────────────────────────────────────
-
       case "uploadFile": {
         const filePath = this._resolveValue(cmd.filePath);
-        /**
-         * NOTE: Screenshot after uploadFile to confirm file name appears
-         * in the UI (e.g. file chip / preview).
-         */
         const input = await this.page.$(cmd.selector);
         if (!input) throw new Error(`File input not found: ${cmd.selector}`);
         await (input as any).uploadFile(filePath);
         break;
       }
-
-      // ── Wait ────────────────────────────────────────────────────────────
-
       case "wait": {
         await new Promise((r) => setTimeout(r, cmd.ms));
         break;
       }
-
       case "waitForSelector": {
         await this.page.waitForSelector(cmd.selector, {
           visible: true,
@@ -661,26 +494,14 @@ export class FormEngine {
         });
         break;
       }
-
       case "waitForNavigation": {
-        /**
-         * NOTE: Screenshot immediately after waitForNavigation to capture
-         * the landed page state — helpful for debugging redirect chains.
-         */
         await this.page.waitForNavigation({
           waitUntil: cmd.waitUntil ?? "networkidle2",
           timeout: cmd.timeout ?? 15_000,
         });
         break;
       }
-
-      // ── Context / state ─────────────────────────────────────────────────
-
       case "readValue": {
-        /**
-         * NOTE: Screenshot after readValue useful to confirm which element
-         * was read, especially for dynamically rendered text values.
-         */
         await this.page.waitForSelector(cmd.selector, { timeout: 8_000 });
         const raw = await this.page.$eval(
           cmd.selector,
@@ -688,67 +509,54 @@ export class FormEngine {
             (el as HTMLInputElement).value ||
             (el as HTMLElement).innerText ||
             el.textContent ||
-            ""
+            "",
         );
         this.context[cmd.saveAs] = raw.trim();
-        this.log(`Context saved: ${cmd.saveAs} = "${this.context[cmd.saveAs]}"`);
+        this.log(
+          `Context saved: ${cmd.saveAs} = "${this.context[cmd.saveAs]}"`,
+        );
         break;
       }
-
       case "setContext": {
         this.context[cmd.key] = this._resolveValue(cmd.value);
         this.log(`Context set: ${cmd.key} = "${this.context[cmd.key]}"`);
         break;
       }
-
-      // ── Screenshot ──────────────────────────────────────────────────────
-
       case "screenshot": {
-        /**
-         * Add screenshot commands at key checkpoints:
-         *   - After each major step completes
-         *   - Before form submission (review_and_submit_step)
-         *   - After navigation lands
-         *   - On optional error paths { optional: true }
-         *   - After file uploads
-         *   - After readValue to confirm what was captured
-         */
         const path = cmd.path ?? `screenshot_${Date.now()}.png`;
         await this.page.screenshot({ path, fullPage: cmd.fullPage ?? false });
         this.log(`Screenshot saved: ${path}`);
         break;
       }
-
-      // ── Conditional branch ───────────────────────────────────────────────
-
       case "if": {
         const val1 = this._resolveValue(cmd.value1);
         const val2 = this._resolveValue(cmd.value2);
         let isTrue = false;
-
         switch (cmd.operator) {
-          case "equals":      isTrue = val1 === val2; break;
-          case "notEquals":   isTrue = val1 !== val2; break;
-          case "contains":    isTrue = val1.includes(val2); break;
-          case "notContains": isTrue = !val1.includes(val2); break;
+          case "equals":
+            isTrue = val1 === val2;
+            break;
+          case "notEquals":
+            isTrue = val1 !== val2;
+            break;
+          case "contains":
+            isTrue = val1.includes(val2);
+            break;
+          case "notContains":
+            isTrue = !val1.includes(val2);
+            break;
         }
-
         const branch = isTrue ? cmd.then : cmd.otherwise;
-        if (branch) {
-          for (const sub of branch) await this._executeCommand(sub);
-        }
+        if (branch) for (const sub of branch) await this._executeCommand(sub);
         break;
       }
-
       default: {
-        // Exhaustiveness guard
         const _: never = cmd;
         throw new Error(`Unknown action: "${(_ as Command).action}"`);
       }
     }
   }
 
-  /** Execute a command with retry + optional-failure support */
   private async _executeWithRetry(cmd: Command): Promise<void> {
     const retries = cmd.retries ?? this.options.commandRetries;
     const delay = cmd.retryDelay ?? this.options.retryDelay;
@@ -761,22 +569,22 @@ export class FormEngine {
       } catch (e: unknown) {
         lastError = e as Error;
         this.log(
-          `  ⚠ "${cmd.action}" attempt ${attempt}/${retries} failed: ${lastError.message}`
+          `  ⚠ "${cmd.action}" attempt ${attempt}/${retries} failed: ${lastError.message}`,
         );
-        if (attempt < retries) {
-          await new Promise((r) => setTimeout(r, delay));
-        }
+        if (attempt < retries) await new Promise((r) => setTimeout(r, delay));
       }
     }
 
     if (cmd.optional) {
-      this.log(`  ↩ Optional "${cmd.action}" skipped after ${retries} attempts`);
+      this.log(
+        `  ↩ Optional "${cmd.action}" skipped after ${retries} attempts`,
+      );
       return;
     }
 
     const sel = "selector" in cmd ? ` on "${(cmd as any).selector}"` : "";
     throw new Error(
-      `Command "${cmd.action}"${sel} failed after ${retries} attempts.\nLast error: ${lastError?.message}`
+      `Command "${cmd.action}"${sel} failed after ${retries} attempts.\nLast error: ${lastError?.message}`,
     );
   }
 
@@ -787,44 +595,20 @@ export class FormEngine {
   async run(): Promise<EngineRunResult> {
     this.log("Engine started — waiting for page load");
 
-    // Always wait for page to be fully loaded before first condition scan
-    await this._waitForPageLoad();
-
-    const mainLoop = this._runLoop();
-
-    let loopResult: Awaited<ReturnType<typeof this._runLoop>>;
-
-    if (this.options.runTimeout > 0) {
-      let timeoutId: ReturnType<typeof setTimeout>;
-      const timeoutPromise = new Promise<{ __timedOut: true }>((resolve) => {
-        timeoutId = setTimeout(
-          () => resolve({ __timedOut: true }),
-          this.options.runTimeout
-        );
-      });
-      const raced = await Promise.race([mainLoop, timeoutPromise]);
-      clearTimeout(timeoutId!);
-
-      if (raced != null && "__timedOut" in raced) {
-        this.log(`⏱ runTimeout (${this.options.runTimeout}ms) hit — status:unknown`);
-        return { status: "unknown", context: this.context, reason: "timeout" };
-      }
-      loopResult = raced as Awaited<ReturnType<typeof this._runLoop>>;
-    } else {
-      loopResult = await mainLoop;
+    const loaded = await this._waitForPageLoad();
+    if (!loaded) {
+      return {
+        status: "failed",
+        reason: "Failed to load page",
+        context: this.context,
+      };
     }
 
-    // Hard failure from loop (infinite-loop guard or max-iterations)
-    if (loopResult?.status === "failed") {
-      return loopResult as EngineRunResult;
-    }
+    const mainLoop = await this._runLoop();
 
-    // success was returned inline from the loop (successCondition matched)
-    if (loopResult?.status === "success") {
-      return loopResult as EngineRunResult;
-    }
+    if (mainLoop?.status === "failed") return mainLoop as EngineRunResult;
+    if (mainLoop?.status === "success") return mainLoop as EngineRunResult;
 
-    // Loop exited with no successCondition match
     if (this.options.successCondition) {
       this.log("⚠ successCondition not matched after loop — status:unknown");
       return {
@@ -834,75 +618,92 @@ export class FormEngine {
       };
     }
 
-    // No successCondition configured — legacy: clean exit = success
     this.log("Engine finished. status:success");
     return { status: "success", context: this.context };
   }
 
   /**
-   * Inner polling loop — fires every `pollInterval` ms.
+   * SCORE-BASED LOOP  ← completely rewritten
    *
-   * Each tick:
-   *   1. Check successCondition first — match → return success immediately.
-   *   2. Scan steps in priority order — first matching step executes then
-   *      loop restarts from top (re-scan after every action).
-   *   3. No match → wait pollInterval → retry.
-   *   4. N consecutive ticks with no match → exit (clean).
+   * Each of 50 cycles (1 s apart):
+   *   1. Score ALL eligible flow steps → sort by pct desc
+   *   2. Score successCondition (if set)
+   *   3. Top-flow-pct vs success-pct
+   *      – success wins (or tie) AND success pct === 100 → return success
+   *      – flow wins AND top-step pct === 100              → run commands
+   *      – nothing at 100 → wait & continue
    *
-   * Returns:
-   *   { status:'success', context }  — successCondition matched mid-loop
-   *   { status:'failed',  error }    — infinite-loop guard or max-iterations
-   *   undefined                      — clean exit (run() decides outcome)
+   * "Wins" = higher pct. Tie → success wins (conservative).
    */
   private async _runLoop(): Promise<
     | { status: "success"; context: Record<string, string> }
     | { status: "failed"; error: string; context: Record<string, string> }
     | undefined
   > {
-    let remaining = this.options.maxIterations;
+    const CYCLES = 50;
+    const PAUSE_MS = 1_000;
 
-    while (remaining-- > 0) {
+    for (let cycle = 1; cycle <= CYCLES; cycle++) {
+      this.log(`── Cycle ${cycle}/${CYCLES} ──`);
 
-      // ── 1. Check successCondition first (highest priority) ───────────────
+      // ── Score successCondition ─────────────────────────────────────────
+      let successPct = 0;
       if (this.options.successCondition) {
-        const won = await this._evaluateCondition(this.options.successCondition);
-        if (won) {
-          this.log("✅ successCondition matched — status:success");
-          return { status: "success", context: this.context };
-        }
+        const s = await this._scoreCondition(this.options.successCondition);
+        successPct = s.score;
+        this.log(`  successCondition score: ${s.score}`);
       }
 
-      // ── 2. Scan steps ────────────────────────────────────────────────────
-      let matched = false;
+      // ── Score all eligible flow steps ──────────────────────────────────
+      type ScoredStep = {
+        step: Step;
+        score: number;
+      };
+      const scored: ScoredStep[] = [];
 
       for (const step of this.steps) {
-        // Skip already-executed non-repeatable steps
         if (!step.repeatable && this.executedSteps.has(step.id)) continue;
+        const s = await this._scoreCondition(step.condition);
+        this.log(`  step "${step.id}" score: ${s.score}`);
+        scored.push({ step, ...s });
+      }
 
-        const isMatch = await this._evaluateCondition(step.condition);
-        if (!isMatch) continue;
+      // Sort by pct desc (priority already baked in step order; stable sort preserves it)
+      scored.sort((a, b) => b.score - a.score);
 
-        // ── Infinite-loop guard ────────────────────────────────────────────
+      const topFlow = scored[0] ?? null;
+      const topFlowPct = topFlow?.score ?? 0;
+
+      this.log(
+        `  topFlow="${topFlow?.step.id ?? "none"}" ${topFlowPct}% | success ${successPct}%`,
+      );
+
+      // ── Decision ───────────────────────────────────────────────────────
+
+      // Success wins (higher or tie) AND fully matched
+      if (this.options.successCondition && successPct >= topFlowPct) {
+        this.log("✅ successCondition wins — status:success");
+        return { status: "success", context: this.context };
+      }
+
+      // Flow wins AND fully matched → run commands
+      if (topFlow && topFlowPct > successPct) {
+        const { step } = topFlow;
+
+        // Infinite-loop guard
         this.consecutiveMatchCount[step.id] =
           (this.consecutiveMatchCount[step.id] ?? 0) + 1;
-
         if (
           this.consecutiveMatchCount[step.id] >
           this.options.consecutiveMatchLimit
         ) {
-          const msg =
-            `Infinite loop: step "${step.id}" matched ` +
-            `${this.consecutiveMatchCount[step.id]}x consecutively. ` +
-            `Ensure commands advance the form state.`;
+          const msg = `Infinite loop: step "${step.id}" matched ${this.consecutiveMatchCount[step.id]}x consecutively.`;
           this.log(`❌ ${msg}`);
           return { status: "failed", error: msg, context: this.context };
         }
 
-        this.log(
-          `✅ Step matched: "${step.id}" (priority: ${step.priority ?? 0})`
-        );
+        this.log(`▶ Running step "${step.id}"`);
 
-        // ── Execute commands ───────────────────────────────────────────────
         try {
           for (const cmd of step.commands) {
             const sel = "selector" in cmd ? ` [${(cmd as any).selector}]` : "";
@@ -916,39 +717,24 @@ export class FormEngine {
           return { status: "failed", error: msg, context: this.context };
         }
 
-        // Mark done
         if (!step.repeatable) this.executedSteps.add(step.id);
 
-        // Reset consecutive counter for this step (commands ran OK)
+        // Reset consecutive counters
         this.consecutiveMatchCount[step.id] = 0;
-        // Reset all other counters — page state changed
         for (const key of Object.keys(this.consecutiveMatchCount)) {
           if (key !== step.id) this.consecutiveMatchCount[key] = 0;
         }
 
-        matched = true;
-        break; // Re-scan from top after every matched step
+        // Don't wait — re-scan immediately after state change
+        continue;
       }
 
-      // ── 3. Poll wait ─────────────────────────────────────────────────────
-      // If a step ran, skip the wait and immediately re-scan (step may have
-      // triggered a page change we can react to right away).
-      // If nothing matched, wait pollInterval before next tick.
-      if (!matched) {
-        this.log(
-          `⏳ No match this tick — waiting ${this.options.pollInterval}ms`
-        );
-        await new Promise((r) => setTimeout(r, this.options.pollInterval));
-      }
+      // Nothing fully matched this cycle — wait 1 s then retry
+      this.log(`⏳ No winner this cycle — waiting ${PAUSE_MS}ms`);
+      await new Promise((r) => setTimeout(r, PAUSE_MS));
     }
 
-    if (remaining <= 0) {
-      const msg = `Engine hit maxIterations (${this.options.maxIterations}). Form may be stuck.`;
-      this.log(`❌ ${msg}`);
-      return { status: "failed", error: msg, context: this.context };
-    }
-
-    this.log("Loop finished cleanly. context:", this.context);
+    this.log(`Loop finished after ${CYCLES} cycles.`);
     return undefined;
   }
 }
